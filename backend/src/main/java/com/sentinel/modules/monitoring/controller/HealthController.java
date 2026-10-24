@@ -32,6 +32,9 @@ public class HealthController {
     @Value("${spring.profiles.active:local}")
     private String activeProfile;
 
+    @Autowired
+    private org.springframework.core.env.Environment environment;
+
     public HealthController(@Autowired(required = false) DataSource dataSource) {
         this.dataSource = dataSource;
     }
@@ -44,12 +47,15 @@ public class HealthController {
 
         String overallStatus = dbHealthy ? "UP" : "DEGRADED";
         long uptimeSeconds = ManagementFactory.getRuntimeMXBean().getUptime() / 1000;
+        String resolvedProfile = (environment != null && environment.getActiveProfiles().length > 0)
+                ? environment.getActiveProfiles()[0]
+                : activeProfile;
 
         HealthResponse health = new HealthResponse(
                 overallStatus,
                 applicationName,
                 "0.0.1-SNAPSHOT",
-                activeProfile,
+                resolvedProfile,
                 Instant.now(),
                 uptimeSeconds,
                 components

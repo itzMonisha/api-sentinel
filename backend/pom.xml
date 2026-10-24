@@ -16,7 +16,7 @@
     <description>API Sentinel - API Security, Reliability and Observability Platform</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>17</java.version>
         <jjwt.version>0.12.6</jjwt.version>
         <springdoc.version>2.6.0</springdoc.version>
         <swagger-parser.version>2.1.22</swagger-parser.version>

@@ -79,67 +79,103 @@ This checklist tracks the end-to-end development of API Sentinel across incremen
 
 ---
 
-## Phase 04: Zero-Trust Network Defense & SSRF Protection Engine
-- [ ] Implement `CidrBlocklist` with bitwise IPv4/IPv6 mask matching algorithms.
-- [ ] Implement DNS resolution validator (checks all returned IPs before TCP handshake).
-- [ ] Implement `SafeHttpClientFactory` using Apache HttpClient 5 / JDK HttpClient with direct socket IP pinning.
-- [ ] Enforce request/response quotas (5s connect timeout, 10s read timeout, 5MB response size limit).
-- [ ] Enforce redirect inspection (disabled by default, re-validated per redirect hop if enabled).
-- [ ] Implement development mode toggle (`api-sentinel.security.allow-local-targets=true/false`).
-- [ ] Write comprehensive unit tests for CIDR matching (loopback, private, link-local, cloud metadata, public IPs).
-- [ ] Write integration tests simulating DNS rebinding defense and redirect traps.
+## Phase 04: Zero-Trust Network Defense & SSRF Protection Engine (COMPLETED)
+- [x] Implement `CidrBlocklist` with bitwise IPv4/IPv6 mask matching algorithms.
+- [x] Implement DNS resolution validator (`TargetValidator`) (checks all returned IPs before TCP handshake).
+- [x] Implement `SafeHttpClient` with zero-trust network boundary and SSRF protection.
+- [x] Enforce request/response quotas (5s connect timeout, 10s read timeout, 5MB response size limit, 2MB request body cap).
+- [x] Enforce redirect inspection (disabled by default, re-validated per redirect hop up to 3 hops).
+- [x] Implement development mode toggle (`api-sentinel.security.allow-local-targets=true/false`).
+- [x] Write comprehensive unit tests for CIDR matching (loopback, private, link-local, cloud metadata, public IPs).
+- [x] Write integration tests simulating network defense, redirect traps, and offline failures.
 
 ---
 
-## Phase 06: Test Suites, Assertions & Execution Engine
-- [ ] Implement Flyway migration `V4__init_test_engine.sql`.
-- [ ] Implement `TestSuite`, `TestCase`, `TestExecution`, and `TestStepResult` entities and repositories.
-- [ ] Implement Assertion Engine:
-  - `STATUS_CODE_EQUALS`
-  - `RESPONSE_TIME_LESS_THAN`
-  - `JSON_PATH_EQUALS` / `JSON_PATH_EXISTS`
-  - `HEADER_EQUALS`
-- [ ] Implement Variable Extraction & Expression Evaluator for chained requests.
-- [ ] Implement DAG Dependency Resolver (Topological Sort / Kahn's Algorithm).
-- [ ] Implement Asynchronous `TestRunner` with bounded `ThreadPoolTaskExecutor`.
-- [ ] Implement `TestSuiteController` and `TestExecutionController`.
-- [ ] Write unit and integration tests executing real HTTP test flows.
+## Phase 06: Test Suites, Assertions & Execution Engine (COMPLETED)
+- [x] Implement Flyway migration `V4__init_test_engine.sql` (`test_suites`, `test_cases`, `test_runs`, `test_results`).
+- [x] Implement `TestSuite`, `TestCase`, `TestRun`, and `TestResult` entities and JPA repositories.
+- [x] Implement Assertion Engine supporting 8 core validation checks:
+  - `STATUS_CODE_EQUALS` (HTTP status equals expected status)
+  - `RESPONSE_TIME_BELOW` (Response time below configured threshold)
+  - `HEADER_EXISTS` (Required response header presence)
+  - `CONTENT_TYPE_MATCHES` (Content-Type header matches expectation)
+  - `JSON_FIELD_EXISTS` (JSON response contains expected field / path)
+  - `JSON_FIELD_EQUALS` (JSON field equals expected value)
+  - `OPENAPI_SCHEMA_MATCH` (Response conforms to OpenAPI response schema)
+  - Error and failure checks (Connection failure, timeout, unexpected server errors)
+- [x] Implement `TestSuiteController`, `TestCaseController`, and `TestRunController`:
+  - `POST /api/v1/test-suites`
+  - CRUD endpoints for test suites and cases (`/api/v1/test-suites/{id}`, `/api/v1/test-cases/{id}`, etc.)
+  - `POST /api/v1/test-suites/{id}/runs`
+  - `GET /api/v1/test-runs/{id}`
+  - `GET /api/v1/test-runs/{id}/results`
+  - `GET /api/v1/endpoints/{id}/test-runs`
+- [x] Enforce project and user concurrency quotas (`MAX_CONCURRENT_RUNS = 5`).
+- [x] Redact sensitive authorization headers, cookies, and secrets.
+- [x] Build comprehensive end-to-end integration test (`TestExecutionIntegrationTest`) with real local HTTP server returning 200, 404, delayed latency, and invalid JSON, demonstrating real persisted results and failure detection.
 
 ---
 
-## Phase 07: Safe Security Scanner
-- [ ] Implement Flyway migration `V5__init_security_scanner.sql`.
-- [ ] Implement `SecurityScan` and `Vulnerability` entities and repositories.
-- [ ] Implement Scanner Rules Engine (non-destructive, read-only checks):
-  1. Missing Security Headers (`HSTS`, `CSP`, `X-Content-Type-Options`, `X-Frame-Options`)
-  2. Cleartext Transport / Insecure Scheme
-  3. Overly Permissive CORS Configurations
-  4. Information Leakage & Stack Trace Fingerprinting
-  5. Unauthenticated Access to Sensitive Endpoints
-  6. Rate Limit Absence Probe
-- [ ] Implement asynchronous `ScannerService` with rate limits per target.
-- [ ] Implement `ScanController` and vulnerability reporting endpoints.
-- [ ] Write unit tests for all scan rules with mock target responses.
+## Phase 07: Safe Security Analysis Engine (COMPLETED)
+- [x] Implement Flyway migration `V5__init_security_scanner.sql` (`security_scans` and `security_findings`).
+- [x] Implement `SecurityScan` and `SecurityFinding` entities and JPA repositories.
+- [x] Implement modular `ScannerCheck` engine with 7 read-only checks:
+  1. `SecurityHeadersCheck` (`Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Server`/`X-Powered-By` banner leakage)
+  2. `InsecureTransportCheck` (Detects cleartext `http://` transport schemes)
+  3. `UnauthenticatedAccessCheck` (Publicly accessible endpoints expected to require auth)
+  4. `AuthenticationConsistencyCheck` (Auth configuration inconsistencies and 500 error leak on malformed token probe)
+  5. `OpenApiSecurityRequirementCheck` (OpenAPI mutating operations documented without security requirements)
+  6. `SensitiveDataExposureCheck` (Conservative heuristics for stack traces, SQL syntax errors, database leakages, and private keys)
+  7. `AuthorizationConsistencyCheck` (Broken Function Level Auth verification using owner-supplied low-privilege test account fixture)
+- [x] Implement `Sanitizer` utility: automatic redaction of JWTs, AWS credentials, RSA/EC private keys, emails, passwords, and file paths.
+- [x] Enforce safety controls:
+  - Read-only probes (GET, HEAD, OPTIONS); never execute exploit payloads, brute force, or DoS.
+  - Zero-Trust network validation and allowlist enforcement via `SafeHttpClient` and `TargetValidator`.
+  - Distinguish `CONFIRMED` observations from `POTENTIAL_RISK`.
+- [x] Implement REST endpoints (`SecurityScanController`):
+  - `POST /api/v1/scans` and `POST /api/v1/projects/{projectId}/scans`
+  - `GET /api/v1/scans/{id}`
+  - `GET /api/v1/scans/{id}/findings`
+  - `GET /api/v1/projects/{projectId}/scans`
+  - `GET /api/v1/endpoints/{id}/security-findings`
+- [x] Unit and Integration Tests:
+  - `ScannerRulesTest`: 11 unit tests covering positive findings and false-positive resistance across all 7 checks.
+  - `SecurityScannerIntegrationTest`: End-to-end integration test with controlled local vulnerable `HttpServer` fixture verifying real database persistence, evidence redaction, and multi-tenant security boundaries.
+- [x] Frontend UI: Full-featured `SecurityScansPage.tsx` with scan launch modal (with optional test account fixture), KPI summary cards, scan history list, and granular findings cards with redacted evidence and remediation guidance.
 
 ---
 
-## Phase 08: Continuous Health Monitoring
-- [ ] Implement Flyway migration `V6__init_health_monitoring.sql`.
-- [ ] Implement `HealthCheck` and `HealthCheckRecord` entities and repositories.
-- [ ] Implement scheduled health probe runner (`@Scheduled` + thread pool).
-- [ ] Implement latency percentiles ($p50$, $p95$, $p99$) and rolling uptime percentage calculation.
-- [ ] Implement `HealthCheckController` with on-demand ping and historical analytics.
-- [ ] Write tests verifying accurate uptime calculation and probe error handling.
-
----
-
-## Phase 09: Incidents & Automated Alerting
-- [ ] Implement Flyway migration `V7__init_incidents_and_audit.sql`.
-- [ ] Implement `Incident` entity and state machine validator (`TRIGGERED`, `ACKNOWLEDGED`, `RESOLVED`, `AUTO_RECOVERED`).
-- [ ] Implement automated triggers (consecutive health failures, critical scan vulnerabilities).
-- [ ] Implement Webhook Alert Dispatcher with exponential backoff.
-- [ ] Implement `IncidentController` (`acknowledge`, `resolve`).
-- [ ] Write unit tests for state machine transitions and webhook dispatching.
+## Phase 08 & Phase 09: API Reliability Monitoring, Incidents & Alerting (COMPLETED)
+- [x] Implement Flyway migration `V6__init_reliability_monitoring.sql` (`health_checks`, `health_check_records`, `incidents`, `alert_notifications`).
+- [x] Implement `HealthCheck`, `HealthCheckRecord`, `Incident`, and `AlertNotification` entities and JPA repositories.
+- [x] Implement scheduled health probe runner (`HealthCheckScheduler`) with bounded concurrency worker pool (`Executors.newFixedThreadPool`) and graceful shutdown.
+- [x] Implement zero-trust network safety enforcement: all health probes pass outbound URL security policies (`SafeHttpClient`, `TargetValidator`, `CidrBlocklist`), per-user timeouts, and request budgets.
+- [x] Implement metric windows & formulas: latency measurements ($p50$, $p95$, $p99$, average), success and failure counts, failure-rate calculation, and insufficient data detection (requires >= 3 persisted records before claiming uptime SLA).
+- [x] Implement incident engine with threshold crossing:
+  - Incident creation when consecutive failure threshold is crossed.
+  - Incident deduplication to prevent duplicate alerts during ongoing outages.
+  - Automatic recovery and resolution tracking when consecutive success threshold is reached.
+  - Manual operator acknowledge and resolve workflows with root cause logging.
+- [x] Implement In-App Alert Center and alert delivery interface (`AlertNotificationService`, `DefaultAlertNotificationService`) with safe development dispatching and optional email hook.
+- [x] Implement REST controller endpoints (`ReliabilityMonitoringController`):
+  - `POST /api/v1/projects/{projectId}/health-checks`
+  - `GET /api/v1/projects/{projectId}/health-checks`
+  - `GET /api/v1/health-checks/{id}`
+  - `PUT /api/v1/health-checks/{id}`
+  - `DELETE /api/v1/health-checks/{id}`
+  - `POST /api/v1/health-checks/{id}/trigger`
+  - `GET /api/v1/health-checks/{id}/records`
+  - `GET /api/v1/projects/{projectId}/incidents`
+  - `GET /api/v1/incidents/{id}`
+  - `POST /api/v1/incidents/{id}/acknowledge`
+  - `POST /api/v1/incidents/{id}/resolve`
+  - `GET /api/v1/projects/{projectId}/alerts`
+  - `POST /api/v1/alerts/{id}/read`
+  - `GET /api/v1/projects/{projectId}/dashboard/summary`
+- [x] Comprehensive unit and integration tests:
+  - `ReliabilityMonitoringUnitTest`: 6 tests verifying metric math, zero denominators, insufficient data detection, threshold crossing, deduplication, and recovery.
+  - `ReliabilityMonitoringIntegrationTest`: 4 integration tests verifying dynamic failing local test endpoints creating incidents, deduplication, auto-recovery on healthy probe, manual acknowledge/resolve, bounded scheduler execution, and cross-project authorization.
+- [x] Frontend UI: Full-featured `IncidentsPage.tsx` with KPI overview cards, status/severity filters, incident state actions, health check scheduler configuration modal, probe trigger with immediate feedback, execution history drawer, and in-app alert center feed.
 
 ---
 

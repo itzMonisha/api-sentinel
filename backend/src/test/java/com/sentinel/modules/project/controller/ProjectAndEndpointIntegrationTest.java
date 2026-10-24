@@ -17,6 +17,8 @@ import com.sentinel.modules.project.entity.ProjectRole;
 import com.sentinel.modules.project.repository.ApiEndpointRepository;
 import com.sentinel.modules.project.repository.ProjectMemberRepository;
 import com.sentinel.modules.project.repository.ProjectRepository;
+import com.sentinel.modules.scanner.repository.SecurityFindingRepository;
+import com.sentinel.modules.scanner.repository.SecurityScanRepository;
 import com.sentinel.shared.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -71,6 +73,12 @@ class ProjectAndEndpointIntegrationTest {
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
 
+    @Autowired(required = false)
+    private SecurityFindingRepository securityFindingRepository;
+
+    @Autowired(required = false)
+    private SecurityScanRepository securityScanRepository;
+
     private User userA;
     private User userB;
     private String tokenA;
@@ -78,6 +86,12 @@ class ProjectAndEndpointIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        if (securityFindingRepository != null) {
+            securityFindingRepository.deleteAll();
+        }
+        if (securityScanRepository != null) {
+            securityScanRepository.deleteAll();
+        }
         apiEndpointRepository.deleteAll();
         projectMemberRepository.deleteAll();
         projectRepository.deleteAll();

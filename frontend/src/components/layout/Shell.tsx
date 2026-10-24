@@ -11,7 +11,8 @@ import {
   Activity,
   RefreshCw,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Bell
 } from 'lucide-react';
 import { NavigationTab, SystemHealthData } from '../../types';
 import { ApiClient } from '../../services/apiClient';
@@ -160,10 +161,19 @@ export const Shell: React.FC<ShellProps> = ({
               {currentTab.replace('-', ' ')}
             </h1>
             <span className="text-slate-600">/</span>
-            <span className="text-xs text-slate-400 font-mono">Phase 01: Core Platform Scaffolding</span>
+            <span className="text-xs text-slate-400 font-mono">Continuous Reliability & Security Sentinel</span>
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => onSelectTab('incidents')}
+              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors relative"
+              title="Alert Center & Incidents"
+            >
+              <Bell className="w-4 h-4 text-amber-400" />
+            </button>
+
             <a
               href="/swagger-ui.html"
               target="_blank"

@@ -10,7 +10,19 @@ import {
   UpdateEndpointInput,
   OpenApiPreviewResponse,
   OpenApiImportResponse,
-  OpenApiImportRequest
+  OpenApiImportRequest,
+  SecurityScan,
+  SecurityFinding,
+  CreateScanInput,
+  HealthCheck,
+  HealthCheckRecord,
+  Incident,
+  IncidentStatus,
+  AlertNotification,
+  ProjectReliabilityDashboard,
+  CreateHealthCheckInput,
+  UpdateHealthCheckInput,
+  ResolveIncidentInput
 } from '../types';
 
 export class ApiClient {
@@ -276,4 +288,196 @@ export class ApiClient {
     });
     return this.handleResponse<OpenApiImportResponse>(res);
   }
+
+  // Security Scanner
+  public static async launchScan(input: CreateScanInput): Promise<SecurityScan> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/scans`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return this.handleResponse<SecurityScan>(res);
+  }
+
+  public static async launchProjectScan(projectId: string, input?: CreateScanInput): Promise<SecurityScan> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/scans`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(input || {}),
+    });
+    return this.handleResponse<SecurityScan>(res);
+  }
+
+  public static async getScan(id: string): Promise<SecurityScan> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/scans/${id}`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<SecurityScan>(res);
+  }
+
+  public static async getScanFindings(id: string): Promise<SecurityFinding[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/scans/${id}/findings`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<SecurityFinding[]>(res);
+  }
+
+  public static async getProjectScans(projectId: string): Promise<SecurityScan[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/scans`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<SecurityScan[]>(res);
+  }
+
+  public static async getEndpointSecurityFindings(endpointId: string): Promise<SecurityFinding[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/endpoints/${endpointId}/security-findings`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<SecurityFinding[]>(res);
+  }
+
+  // ==========================================
+  // Phase 06: Reliability Monitoring & Incidents
+  // ==========================================
+
+  public static async createHealthCheck(projectId: string, input: CreateHealthCheckInput): Promise<HealthCheck> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/health-checks`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return this.handleResponse<HealthCheck>(res);
+  }
+
+  public static async getProjectHealthChecks(projectId: string): Promise<HealthCheck[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/health-checks`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<HealthCheck[]>(res);
+  }
+
+  public static async getHealthCheck(checkId: string): Promise<HealthCheck> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/health-checks/${checkId}`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<HealthCheck>(res);
+  }
+
+  public static async updateHealthCheck(checkId: string, input: UpdateHealthCheckInput): Promise<HealthCheck> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/health-checks/${checkId}`, {
+      method: 'PUT',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return this.handleResponse<HealthCheck>(res);
+  }
+
+  public static async deleteHealthCheck(checkId: string): Promise<void> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/health-checks/${checkId}`, {
+      method: 'DELETE',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<void>(res);
+  }
+
+  public static async triggerHealthCheck(checkId: string): Promise<HealthCheckRecord> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/health-checks/${checkId}/trigger`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<HealthCheckRecord>(res);
+  }
+
+  public static async getHealthCheckRecords(checkId: string, limit = 50): Promise<HealthCheckRecord[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/health-checks/${checkId}/records?limit=${limit}`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<HealthCheckRecord[]>(res);
+  }
+
+  public static async getProjectIncidents(projectId: string, status?: IncidentStatus): Promise<Incident[]> {
+    await this.ensureAuthenticated();
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    const res = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/incidents${query}`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<Incident[]>(res);
+  }
+
+  public static async getIncident(incidentId: string): Promise<Incident> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/incidents/${incidentId}`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<Incident>(res);
+  }
+
+  public static async acknowledgeIncident(incidentId: string): Promise<Incident> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/incidents/${incidentId}/acknowledge`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<Incident>(res);
+  }
+
+  public static async resolveIncident(incidentId: string, input?: ResolveIncidentInput): Promise<Incident> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/incidents/${incidentId}/resolve`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(input || {}),
+    });
+    return this.handleResponse<Incident>(res);
+  }
+
+  public static async getProjectAlerts(projectId: string): Promise<AlertNotification[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/alerts`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<AlertNotification[]>(res);
+  }
+
+  public static async markAlertRead(alertId: string): Promise<void> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/alerts/${alertId}/read`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<void>(res);
+  }
+
+  public static async getProjectReliabilityDashboard(projectId: string): Promise<ProjectReliabilityDashboard> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/dashboard/summary`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<ProjectReliabilityDashboard>(res);
+  }
 }
+
