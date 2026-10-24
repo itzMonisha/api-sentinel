@@ -22,19 +22,69 @@ import {
   ProjectReliabilityDashboard,
   CreateHealthCheckInput,
   UpdateHealthCheckInput,
-  ResolveIncidentInput
+  ResolveIncidentInput,
+  TestSuite,
+  CreateTestSuiteInput,
+  UpdateTestSuiteInput,
+  TestCase,
+  CreateTestCaseInput,
+  UpdateTestCaseInput,
+  TestRun,
+  TestResult,
+  User,
+  AuthResponse
 } from '../types';
 
 export class ApiClient {
   private static baseUrl = '';
-  private static accessToken: string | null = null;
+  private static accessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('sentinel_access_token') : null;
+  private static refreshTokenVal: string | null = typeof window !== 'undefined' ? localStorage.getItem('sentinel_refresh_token') : null;
+  private static currentUser: User | null = null;
+  private static authListeners: Array<(user: User | null) => void> = [];
+
+  public static onAuthChange(listener: (user: User | null) => void): () => void {
+    this.authListeners.push(listener);
+    listener(this.currentUser);
+    return () => {
+      this.authListeners = this.authListeners.filter(l => l !== listener);
+    };
+  }
+
+  private static notifyAuthChange() {
+    this.authListeners.forEach(listener => listener(this.currentUser));
+  }
+
+  public static setTokens(accessToken: string | null, refreshToken: string | null = null) {
+    this.accessToken = accessToken;
+    this.refreshTokenVal = refreshToken;
+    if (typeof window !== 'undefined') {
+      if (accessToken) {
+        localStorage.setItem('sentinel_access_token', accessToken);
+      } else {
+        localStorage.removeItem('sentinel_access_token');
+      }
+      if (refreshToken) {
+        localStorage.setItem('sentinel_refresh_token', refreshToken);
+      } else {
+        localStorage.removeItem('sentinel_refresh_token');
+      }
+    }
+  }
 
   public static setAccessToken(token: string | null) {
-    this.accessToken = token;
+    this.setTokens(token, this.refreshTokenVal);
   }
 
   public static getAccessToken(): string | null {
     return this.accessToken;
+  }
+
+  public static getRefreshToken(): string | null {
+    return this.refreshTokenVal;
+  }
+
+  public static getCachedUser(): User | null {
+    return this.currentUser;
   }
 
   private static async getHeaders(contentType: string | null = 'application/json'): Promise<HeadersInit> {
@@ -52,6 +102,11 @@ export class ApiClient {
 
   private static async handleResponse<T>(res: Response): Promise<T> {
     if (!res.ok) {
+      if (res.status === 401) {
+        this.setTokens(null, null);
+        this.currentUser = null;
+        this.notifyAuthChange();
+      }
       const errorJson = await res.json().catch(() => null);
       const detail = errorJson?.error?.detail || errorJson?.error?.title || `Request failed with status ${res.status}`;
       const fieldErrors = errorJson?.error?.fieldErrors;
@@ -91,7 +146,9 @@ export class ApiClient {
       });
       if (loginRes.ok) {
         const body = await loginRes.json();
-        this.accessToken = body.data.accessToken;
+        this.setTokens(body.data.accessToken, body.data.refreshToken);
+        this.currentUser = body.data.user;
+        this.notifyAuthChange();
         return this.accessToken!;
       }
     } catch {
@@ -111,8 +168,10 @@ export class ApiClient {
       });
       if (regRes.ok) {
         const body = await regRes.json();
-        this.accessToken = body.data.accessToken;
-        return this.accessToken!;
+        if (body.data?.accessToken) {
+          this.setTokens(body.data.accessToken, body.data.refreshToken);
+        }
+        return this.accessToken || '';
       }
     } catch {
       // ignore
@@ -408,7 +467,7 @@ export class ApiClient {
 
   public static async getHealthCheckRecords(checkId: string, limit = 50): Promise<HealthCheckRecord[]> {
     await this.ensureAuthenticated();
-    const res = await fetch(`${this.baseUrl}/api/v1/health-checks/${checkId}/records?limit=${limit}`, {
+    const res = await fetch(`${this.baseUrl}/api/v1/health-checks/${checkId}/history?limit=${limit}`, {
       method: 'GET',
       headers: await this.getHeaders(),
     });
@@ -478,6 +537,219 @@ export class ApiClient {
       headers: await this.getHeaders(),
     });
     return this.handleResponse<ProjectReliabilityDashboard>(res);
+  }
+
+  // ==========================================
+  // Test Suites & Execution Engine
+  // ==========================================
+
+  public static async listTestSuites(projectId: string): Promise<TestSuite[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/test-suites`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<TestSuite[]>(res);
+  }
+
+  public static async getTestSuite(id: string): Promise<TestSuite> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-suites/${id}`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<TestSuite>(res);
+  }
+
+  public static async createTestSuite(projectId: string, input: CreateTestSuiteInput): Promise<TestSuite> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/test-suites`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return this.handleResponse<TestSuite>(res);
+  }
+
+  public static async updateTestSuite(id: string, input: UpdateTestSuiteInput): Promise<TestSuite> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-suites/${id}`, {
+      method: 'PUT',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return this.handleResponse<TestSuite>(res);
+  }
+
+  public static async deleteTestSuite(id: string): Promise<void> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-suites/${id}`, {
+      method: 'DELETE',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<void>(res);
+  }
+
+  public static async createTestCase(suiteId: string, input: CreateTestCaseInput): Promise<TestCase> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-suites/${suiteId}/cases`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return this.handleResponse<TestCase>(res);
+  }
+
+  public static async getTestCases(suiteId: string): Promise<TestCase[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-suites/${suiteId}/cases`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<TestCase[]>(res);
+  }
+
+  public static async getTestCase(caseId: string): Promise<TestCase> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-cases/${caseId}`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<TestCase>(res);
+  }
+
+  public static async updateTestCase(caseId: string, input: UpdateTestCaseInput): Promise<TestCase> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-cases/${caseId}`, {
+      method: 'PUT',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return this.handleResponse<TestCase>(res);
+  }
+
+  public static async deleteTestCase(caseId: string): Promise<void> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-cases/${caseId}`, {
+      method: 'DELETE',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<void>(res);
+  }
+
+  public static async triggerTestRun(suiteId: string): Promise<TestRun> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-suites/${suiteId}/runs`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<TestRun>(res);
+  }
+
+  public static async getTestRunsBySuite(suiteId: string): Promise<TestRun[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-suites/${suiteId}/runs`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<TestRun[]>(res);
+  }
+
+  public static async getTestRun(runId: string): Promise<TestRun> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-runs/${runId}`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<TestRun>(res);
+  }
+
+  public static async getTestRunResults(runId: string): Promise<TestResult[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/test-runs/${runId}/results`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<TestResult[]>(res);
+  }
+
+  public static async getEndpointTestRuns(endpointId: string): Promise<TestRun[]> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/endpoints/${endpointId}/test-runs`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    return this.handleResponse<TestRun[]>(res);
+  }
+
+  // ==========================================
+  // Real Identity & Profile Endpoints
+  // ==========================================
+
+  public static async getCurrentUser(): Promise<User> {
+    await this.ensureAuthenticated();
+    const res = await fetch(`${this.baseUrl}/api/v1/auth/me`, {
+      method: 'GET',
+      headers: await this.getHeaders(),
+    });
+    const user = await this.handleResponse<User>(res);
+    this.currentUser = user;
+    this.notifyAuthChange();
+    return user;
+  }
+
+  public static async login(email: string, password: string): Promise<AuthResponse> {
+    const res = await fetch(`${this.baseUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const auth = await this.handleResponse<AuthResponse>(res);
+    this.setTokens(auth.accessToken, auth.refreshToken);
+    this.currentUser = auth.user;
+    this.notifyAuthChange();
+    return auth;
+  }
+
+  public static async register(email: string, password: string, fullName: string): Promise<User> {
+    const res = await fetch(`${this.baseUrl}/api/v1/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ email, password, fullName }),
+    });
+    return this.handleResponse<User>(res);
+  }
+
+  public static async refreshToken(): Promise<AuthResponse> {
+    if (!this.refreshTokenVal) {
+      throw new Error('No refresh token available');
+    }
+    const res = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ refreshToken: this.refreshTokenVal }),
+    });
+    const auth = await this.handleResponse<AuthResponse>(res);
+    this.setTokens(auth.accessToken, auth.refreshToken);
+    this.currentUser = auth.user;
+    this.notifyAuthChange();
+    return auth;
+  }
+
+  public static async logout(): Promise<void> {
+    try {
+      if (this.accessToken) {
+        await fetch(`${this.baseUrl}/api/v1/auth/logout`, {
+          method: 'POST',
+          headers: await this.getHeaders(),
+          body: JSON.stringify({ refreshToken: this.refreshTokenVal }),
+        });
+      }
+    } finally {
+      this.setTokens(null, null);
+      this.currentUser = null;
+      this.notifyAuthChange();
+    }
   }
 }
 

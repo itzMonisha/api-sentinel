@@ -15,6 +15,7 @@ import {
 import { ApiClient } from '../services/apiClient';
 import { Project, CreateProjectInput, UpdateProjectInput } from '../types';
 import { EmptyState } from '../components/common/EmptyState';
+import { Pagination } from '../components/common/Pagination';
 
 interface ProjectsPageProps {
   onNavigateToEndpoints?: (projectId: string) => void;
@@ -25,6 +26,12 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onNavigateToEndpoint
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const pageSize = 9;
 
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -44,8 +51,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onNavigateToEndpoint
     try {
       setLoading(true);
       setError(null);
-      const res = await ApiClient.listProjects(search || undefined);
+      const res = await ApiClient.listProjects(search || undefined, currentPage, pageSize);
       setProjects(res.content);
+      setTotalPages(res.totalPages || 1);
+      setTotalElements(res.totalElements || 0);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch projects');
     } finally {
@@ -55,7 +64,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onNavigateToEndpoint
 
   useEffect(() => {
     loadProjects();
-  }, [search]);
+  }, [search, currentPage]);
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,6 +274,15 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onNavigateToEndpoint
           ))}
         </div>
       )}
+
+      {/* Pagination */}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalElements={totalElements}
+        pageSize={pageSize}
+        onPageChange={(p) => setCurrentPage(p)}
+      />
 
       {/* Create Project Modal */}
       {isCreateOpen && (

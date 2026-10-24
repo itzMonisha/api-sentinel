@@ -13,7 +13,12 @@ import {
   X, 
   FolderKanban,
   Code2,
-  FileText
+  FileText,
+  Activity,
+  Play,
+  ShieldAlert,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import { ApiClient } from '../services/apiClient';
 import { 
@@ -21,9 +26,14 @@ import {
   ApiEndpoint, 
   CreateEndpointInput, 
   OpenApiPreviewResponse, 
-  AuthType 
+  AuthType,
+  HealthCheck,
+  HealthCheckRecord,
+  SecurityFinding,
+  TestRun
 } from '../types';
 import { EmptyState } from '../components/common/EmptyState';
+import { Pagination } from '../components/common/Pagination';
 
 const HTTP_METHODS = ['ALL', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 
@@ -40,8 +50,21 @@ export const EndpointsPage: React.FC<EndpointsPageProps> = ({ initialProjectId }
   const [selectedMethod, setSelectedMethod] = useState('ALL');
   const [error, setError] = useState<string | null>(null);
 
-  // Endpoint Details Drawer
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const pageSize = 15;
+
+  // Endpoint Details Drawer & Telemetry
   const [inspectEndpoint, setInspectEndpoint] = useState<ApiEndpoint | null>(null);
+  const [endpointHealthCheck, setEndpointHealthCheck] = useState<HealthCheck | null>(null);
+  const [endpointHistoryRecords, setEndpointHistoryRecords] = useState<HealthCheckRecord[]>([]);
+  const [endpointTestRuns, setEndpointTestRuns] = useState<TestRun[]>([]);
+  const [endpointFindings, setEndpointFindings] = useState<SecurityFinding[]>([]);
+  const [loadingDrawerTelemetry, setLoadingDrawerTelemetry] = useState(false);
+  const [probeTriggering, setProbeTriggering] = useState(false);
+  const [probeFeedback, setProbeFeedback] = useState<string | null>(null);
 
   // Register / Edit Modal
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
@@ -87,7 +110,7 @@ export const EndpointsPage: React.FC<EndpointsPageProps> = ({ initialProjectId }
     fetchProjects();
   }, []);
 
-  // Load endpoints when selected project, method, or search changes
+  // Load endpoints when selected project, method, search, or page changes
   const loadEndpoints = async () => {
     if (!selectedProjectId) {
       setEndpoints([]);
@@ -100,9 +123,13 @@ export const EndpointsPage: React.FC<EndpointsPageProps> = ({ initialProjectId }
       const res = await ApiClient.listEndpoints(
         selectedProjectId,
         selectedMethod !== 'ALL' ? selectedMethod : undefined,
-        search || undefined
+        search || undefined,
+        currentPage,
+        pageSize
       );
       setEndpoints(res.content);
+      setTotalPages(res.totalPages || 1);
+      setTotalElements(res.totalElements || 0);
     } catch (err: any) {
       setError(err.message || 'Failed to load endpoints');
     } finally {
@@ -112,7 +139,54 @@ export const EndpointsPage: React.FC<EndpointsPageProps> = ({ initialProjectId }
 
   useEffect(() => {
     loadEndpoints();
-  }, [selectedProjectId, selectedMethod, search]);
+  }, [selectedProjectId, selectedMethod, search, currentPage]);
+
+  const handleInspectEndpoint = async (endpoint: ApiEndpoint) => {
+    setInspectEndpoint(endpoint);
+    setEndpointHealthCheck(null);
+    setEndpointHistoryRecords([]);
+    setEndpointTestRuns([]);
+    setEndpointFindings([]);
+    setLoadingDrawerTelemetry(true);
+    setProbeFeedback(null);
+
+    try {
+      const [checks, runs, findings] = await Promise.all([
+        ApiClient.getProjectHealthChecks(selectedProjectId).catch(() => []),
+        ApiClient.getEndpointTestRuns(endpoint.id).catch(() => []),
+        ApiClient.getEndpointSecurityFindings(endpoint.id).catch(() => []),
+      ]);
+
+      const matchingCheck = checks.find(
+        c => c.endpointId === endpoint.id || c.endpointUrl === endpoint.url
+      );
+      setEndpointHealthCheck(matchingCheck || null);
+      setEndpointTestRuns(runs);
+      setEndpointFindings(findings);
+
+      if (matchingCheck) {
+        const records = await ApiClient.getHealthCheckRecords(matchingCheck.id, 25).catch(() => []);
+        setEndpointHistoryRecords(records);
+      }
+    } finally {
+      setLoadingDrawerTelemetry(false);
+    }
+  };
+
+  const handleTriggerEndpointProbe = async () => {
+    if (!endpointHealthCheck) return;
+    try {
+      setProbeTriggering(true);
+      setProbeFeedback(null);
+      const record = await ApiClient.triggerHealthCheck(endpointHealthCheck.id);
+      setEndpointHistoryRecords(prev => [record, ...prev]);
+      setProbeFeedback(`Probe executed: HTTP ${record.statusCode} in ${record.responseTimeMs}ms (${record.success ? 'Success' : 'Failure'})`);
+    } catch (err: any) {
+      setProbeFeedback(`Probe failed: ${err.message}`);
+    } finally {
+      setProbeTriggering(false);
+    }
+  };
 
   const handleEndpointSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -429,7 +503,7 @@ export const EndpointsPage: React.FC<EndpointsPageProps> = ({ initialProjectId }
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setInspectEndpoint(endpoint)}
+                    onClick={() => handleInspectEndpoint(endpoint)}
                     className="p-1.5 rounded-md hover:bg-cyan-500/10 text-slate-400 hover:text-cyan-300 transition-colors"
                     title="View Schemas & Details"
                   >
@@ -469,6 +543,15 @@ export const EndpointsPage: React.FC<EndpointsPageProps> = ({ initialProjectId }
               </div>
             </div>
           ))}
+
+          {/* Table Pagination */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalElements={totalElements}
+            pageSize={pageSize}
+            onPageChange={(p) => setCurrentPage(p)}
+          />
         </div>
       )}
 
@@ -540,14 +623,167 @@ export const EndpointsPage: React.FC<EndpointsPageProps> = ({ initialProjectId }
                 )}
               </div>
 
-              {/* Test History */}
-              <div className="pt-2 border-t border-white/5">
-                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2">
-                  Test Execution History
-                </span>
-                <div className="text-xs text-slate-500 italic p-3 rounded bg-white/[0.02] border border-white/5 text-center">
-                  No automated test runs executed for this endpoint yet. (Automated tests unlocked in Phase 04).
+              {/* Live Reliability & Health Probe History */}
+              <div className="pt-3 border-t border-white/5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5" />
+                    Live Reliability Health Probe & History
+                  </span>
+                  {endpointHealthCheck && (
+                    <button
+                      type="button"
+                      onClick={handleTriggerEndpointProbe}
+                      disabled={probeTriggering}
+                      className="btn-primary py-1 px-2.5 text-[11px] font-mono"
+                    >
+                      <Play className={`w-3 h-3 ${probeTriggering ? 'animate-spin' : ''}`} />
+                      <span>{probeTriggering ? 'Probing...' : 'Trigger Immediate Probe'}</span>
+                    </button>
+                  )}
                 </div>
+
+                {probeFeedback && (
+                  <div className="p-2.5 rounded bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 text-xs font-mono">
+                    {probeFeedback}
+                  </div>
+                )}
+
+                {loadingDrawerTelemetry ? (
+                  <div className="text-xs font-mono text-slate-400 p-3 bg-white/[0.02] rounded border border-white/5 animate-pulse">
+                    Loading historical health checks and execution telemetry...
+                  </div>
+                ) : !endpointHealthCheck ? (
+                  <div className="text-xs text-slate-500 italic p-3 rounded bg-white/[0.02] border border-white/5 text-center">
+                    No dedicated periodic health check probe configured for this endpoint. Visit the Incidents & Reliability page to configure automated monitoring.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                      <div className="p-2 rounded bg-black/40 border border-white/5">
+                        <span className="text-slate-400 text-[10px] block">Status</span>
+                        <span className="text-emerald-400 font-bold">{endpointHealthCheck.lastStatus || 'HEALTHY'}</span>
+                      </div>
+                      <div className="p-2 rounded bg-black/40 border border-white/5">
+                        <span className="text-slate-400 text-[10px] block">Interval</span>
+                        <span className="text-white font-bold">{endpointHealthCheck.intervalSeconds}s</span>
+                      </div>
+                      <div className="p-2 rounded bg-black/40 border border-white/5">
+                        <span className="text-slate-400 text-[10px] block">Expected HTTP</span>
+                        <span className="text-cyan-400 font-bold">{endpointHealthCheck.expectedStatus}</span>
+                      </div>
+                      <div className="p-2 rounded bg-black/40 border border-white/5">
+                        <span className="text-slate-400 text-[10px] block">Consecutive Fails</span>
+                        <span className={endpointHealthCheck.consecutiveFailures > 0 ? 'text-rose-400 font-bold' : 'text-slate-200'}>
+                          {endpointHealthCheck.consecutiveFailures}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Records Table */}
+                    <span className="text-[10px] font-mono uppercase text-slate-400 block pt-1">
+                      Recent Probes ({endpointHistoryRecords.length}):
+                    </span>
+                    {endpointHistoryRecords.length === 0 ? (
+                      <div className="text-xs text-slate-500 italic p-2 bg-black/20 rounded">
+                        No health probe executions logged yet. Click "Trigger Immediate Probe" above to test now.
+                      </div>
+                    ) : (
+                      <div className="max-h-36 overflow-y-auto space-y-1">
+                        {endpointHistoryRecords.map(r => (
+                          <div
+                            key={r.id}
+                            className="p-2 rounded bg-black/30 border border-white/5 flex items-center justify-between text-xs font-mono"
+                          >
+                            <div className="flex items-center gap-2">
+                              {r.success ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                              )}
+                              <span className="text-white font-bold">HTTP {r.statusCode}</span>
+                              <span className="text-slate-400">({r.responseTimeMs}ms)</span>
+                            </div>
+                            <span className="text-[11px] text-slate-500">
+                              {new Date(r.executedAt).toLocaleTimeString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Endpoint Test Execution History */}
+              <div className="pt-3 border-t border-white/5 space-y-2">
+                <span className="text-[11px] font-mono text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Play className="w-3.5 h-3.5" />
+                  Integration Test History ({endpointTestRuns.length})
+                </span>
+
+                {endpointTestRuns.length === 0 ? (
+                  <div className="text-xs text-slate-500 italic p-3 rounded bg-white/[0.02] border border-white/5 text-center">
+                    No integration test runs recorded for this endpoint yet.
+                  </div>
+                ) : (
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {endpointTestRuns.map(run => (
+                      <div
+                        key={run.id}
+                        className="p-2 rounded bg-black/30 border border-white/5 flex items-center justify-between text-xs font-mono"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                              run.status === 'PASSED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                            }`}
+                          >
+                            {run.status}
+                          </span>
+                          <span className="text-white">{run.testSuiteName || 'Integration Suite'}</span>
+                        </div>
+                        <span className="text-slate-400 text-[11px]">
+                          {run.passedTests}/{run.totalTests} passed ({run.durationMs}ms)
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Endpoint Security Findings */}
+              <div className="pt-3 border-t border-white/5 space-y-2">
+                <span className="text-[11px] font-mono text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  Security Vulnerability Findings ({endpointFindings.length})
+                </span>
+
+                {endpointFindings.length === 0 ? (
+                  <div className="text-xs text-emerald-400 italic p-3 rounded bg-emerald-500/5 border border-emerald-500/20 text-center">
+                    Zero security vulnerabilities found for this endpoint.
+                  </div>
+                ) : (
+                  <div className="max-h-36 overflow-y-auto space-y-1.5">
+                    {endpointFindings.map(f => (
+                      <div
+                        key={f.id}
+                        className="p-2.5 rounded bg-rose-950/20 border border-rose-500/20 text-xs font-mono space-y-1"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-rose-300">[{f.severity}] {f.title}</span>
+                          <span className="text-[10px] text-slate-400">{f.ruleId}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-300">{f.description}</p>
+                        {f.remediation && (
+                          <div className="text-[10px] text-emerald-400 font-mono">
+                            Fix: {f.remediation}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

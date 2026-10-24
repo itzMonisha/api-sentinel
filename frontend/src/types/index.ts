@@ -359,4 +359,136 @@ export interface ResolveIncidentInput {
   rootCause?: string;
 }
 
+// ==========================================
+// Test Suites, Test Cases & Execution Runs
+// ==========================================
 
+export type TestStatus = 'PENDING' | 'RUNNING' | 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR';
+
+export type AssertionType =
+  | 'STATUS_CODE_EQUALS'
+  | 'RESPONSE_TIME_BELOW'
+  | 'HEADER_EXISTS'
+  | 'CONTENT_TYPE_MATCHES'
+  | 'JSON_FIELD_EXISTS'
+  | 'JSON_FIELD_EQUALS'
+  | 'OPENAPI_SCHEMA_MATCH';
+
+export interface AssertionDefinition {
+  type: AssertionType;
+  property?: string;
+  expected?: string;
+  message?: string;
+}
+
+export interface AssertionResult {
+  type: string;
+  property?: string;
+  expected?: string;
+  actual?: string;
+  passed: boolean;
+  message: string;
+}
+
+export interface TestCase {
+  id: string;
+  testSuiteId: string;
+  endpointId?: string;
+  endpointName?: string;
+  name: string;
+  executionOrder: number;
+  httpMethod: string;
+  targetPath: string;
+  headers?: Record<string, string>;
+  queryParams?: Record<string, string>;
+  requestBody?: string;
+  assertions: AssertionDefinition[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TestSuite {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string;
+  caseCount: number;
+  testCases?: TestCase[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTestSuiteInput {
+  projectId?: string;
+  name: string;
+  description?: string;
+}
+
+export interface UpdateTestSuiteInput {
+  name: string;
+  description?: string;
+}
+
+export interface CreateTestCaseInput {
+  endpointId?: string;
+  name: string;
+  executionOrder?: number;
+  httpMethod: string;
+  targetPath: string;
+  headers?: Record<string, string>;
+  queryParams?: Record<string, string>;
+  requestBody?: string;
+  assertions: AssertionDefinition[];
+}
+
+export interface UpdateTestCaseInput extends Partial<CreateTestCaseInput> {}
+
+export interface TestRun {
+  id: string;
+  testSuiteId: string;
+  testSuiteName: string;
+  triggeredById?: string;
+  triggeredByEmail?: string;
+  status: TestStatus;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  durationMs?: number;
+  startedAt?: string;
+  finishedAt?: string;
+  createdAt: string;
+}
+
+export interface TestResult {
+  id: string;
+  testRunId: string;
+  testCaseId?: string;
+  testCaseName: string;
+  status: TestStatus;
+  httpStatusCode?: number;
+  responseTimeMs: number;
+  assertionResults: AssertionResult[];
+  errorMessage?: string;
+  createdAt: string;
+}
+
+// ==========================================
+// Authentication & User Profile
+// ==========================================
+
+export interface User {
+  id: string;
+  email: string;
+  fullName: string;
+  role: 'OWNER' | 'ADMIN' | 'DEVELOPER' | 'VIEWER' | string;
+  enabled: boolean;
+  createdAt: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+  user: User;
+}

@@ -12,11 +12,13 @@ import {
   RefreshCw,
   ExternalLink,
   ChevronRight,
-  Bell
+  Bell,
+  Key
 } from 'lucide-react';
-import { NavigationTab, SystemHealthData } from '../../types';
+import { NavigationTab, SystemHealthData, User } from '../../types';
 import { ApiClient } from '../../services/apiClient';
 import { StatusBadge } from '../common/StatusBadge';
+import { AuthModal } from '../common/AuthModal';
 
 interface ShellProps {
   currentTab: NavigationTab;
@@ -32,6 +34,8 @@ export const Shell: React.FC<ShellProps> = ({
   const [health, setHealth] = useState<SystemHealthData | null>(null);
   const [healthLoading, setHealthLoading] = useState<boolean>(true);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const fetchHealth = async () => {
     try {
@@ -47,20 +51,36 @@ export const Shell: React.FC<ShellProps> = ({
     }
   };
 
+  const fetchUser = async () => {
+    try {
+      const u = await ApiClient.getCurrentUser();
+      setCurrentUser(u);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     fetchHealth();
+    fetchUser();
     const interval = setInterval(fetchHealth, 30000); // 30s probe
-    return () => clearInterval(interval);
+    const unsub = ApiClient.onAuthChange((u) => {
+      setCurrentUser(u);
+    });
+    return () => {
+      clearInterval(interval);
+      unsub();
+    };
   }, []);
 
   const navItems = [
-    { id: 'dashboard' as NavigationTab, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'projects' as NavigationTab, label: 'Projects & Registry', icon: FolderKanban },
-    { id: 'endpoints' as NavigationTab, label: 'Discovered Endpoints', icon: Network },
-    { id: 'test-runs' as NavigationTab, label: 'Test Runs', icon: PlayCircle },
+    { id: 'dashboard' as NavigationTab, label: 'Overview Dashboard', icon: LayoutDashboard },
+    { id: 'projects' as NavigationTab, label: 'Projects Registry', icon: FolderKanban },
+    { id: 'endpoints' as NavigationTab, label: 'Endpoints & Health History', icon: Network },
+    { id: 'test-runs' as NavigationTab, label: 'Test Suites & Runs', icon: PlayCircle },
     { id: 'security-scans' as NavigationTab, label: 'Security Scans', icon: ShieldAlert },
-    { id: 'incidents' as NavigationTab, label: 'Incidents & SLA', icon: AlertOctagon },
-    { id: 'settings' as NavigationTab, label: 'System Settings', icon: Settings },
+    { id: 'incidents' as NavigationTab, label: 'Incidents & Alerts', icon: AlertOctagon },
+    { id: 'settings' as NavigationTab, label: 'Account & Settings', icon: Settings },
   ];
 
   return (
@@ -77,18 +97,31 @@ export const Shell: React.FC<ShellProps> = ({
               <span className="font-bold text-sm tracking-wide text-white">API SENTINEL</span>
               <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-semibold">v0.1</span>
             </div>
-            <p className="text-[11px] text-slate-400 font-medium">Security & Reliability</p>
+            <p className="text-[11px] text-slate-400 font-medium">Observability & Security</p>
           </div>
         </div>
 
-        {/* Workspace Indicator */}
+        {/* User Account / Workspace Status */}
         <div className="px-4 py-3 border-b border-white/5">
-          <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5 flex items-center justify-between">
-            <div className="truncate">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">Workspace</span>
-              <span className="text-xs font-semibold text-slate-200">Default Workspace</span>
+          <div
+            onClick={() => onSelectTab('settings')}
+            className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5 flex items-center justify-between cursor-pointer hover:border-cyan-500/30 transition-all"
+            title="Click to view account and settings"
+          >
+            <div className="truncate flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-cyan-500/15 border border-cyan-500/20 flex items-center justify-center text-cyan-400 font-mono text-xs font-bold shrink-0">
+                {currentUser?.fullName?.charAt(0) || 'D'}
+              </div>
+              <div className="truncate">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block truncate">
+                  {currentUser?.role || 'DEVELOPER'}
+                </span>
+                <span className="text-xs font-semibold text-slate-200 truncate block">
+                  {currentUser?.fullName || 'Lead Developer'}
+                </span>
+              </div>
             </div>
-            <span className="w-2 h-2 rounded-full bg-cyan-400/80" />
+            <span className="w-2 h-2 rounded-full bg-cyan-400/80 shrink-0" />
           </div>
         </div>
 
@@ -140,7 +173,7 @@ export const Shell: React.FC<ShellProps> = ({
             {health ? (
               <>
                 <StatusBadge status={health.status} size="sm" />
-                <span className="text-[11px] font-mono text-slate-400">{health.environment}</span>
+                <span className="text-[11px] font-mono text-slate-400 uppercase">{health.environment}</span>
               </>
             ) : (
               <span className="text-[11px] font-mono text-rose-400 flex items-center gap-1">
@@ -170,8 +203,19 @@ export const Shell: React.FC<ShellProps> = ({
               onClick={() => onSelectTab('incidents')}
               className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors relative"
               title="Alert Center & Incidents"
+              aria-label="Alert Center & Incidents"
             >
               <Bell className="w-4 h-4 text-amber-400" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsAuthModalOpen(true)}
+              className="btn-secondary text-xs font-mono"
+              title="Manage Authentication Session"
+            >
+              <Key className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{currentUser ? currentUser.email : 'Authenticate'}</span>
             </button>
 
             <a
@@ -180,10 +224,11 @@ export const Shell: React.FC<ShellProps> = ({
               rel="noreferrer"
               className="btn-secondary text-xs font-mono"
             >
-              <span>Swagger API Docs</span>
+              <span>Swagger Docs</span>
               <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
             </a>
-            <div className="px-2.5 py-1 rounded bg-cyan-950/40 border border-cyan-500/20 text-cyan-400 text-xs font-mono">
+
+            <div className="hidden sm:flex px-2.5 py-1 rounded bg-cyan-950/40 border border-cyan-500/20 text-cyan-400 text-xs font-mono">
               Zero-Trust Active
             </div>
           </div>
@@ -206,6 +251,14 @@ export const Shell: React.FC<ShellProps> = ({
           {children}
         </main>
       </div>
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={fetchUser}
+      />
     </div>
   );
 };
+
+export default Shell;
