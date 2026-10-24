@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: api-sentinel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-api_sentinel}
+      POSTGRES_USER: ${DB_USER:-sentinel_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sentinel_secret_change_in_production}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sentinel_user} -d ${DB_NAME:-api_sentinel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sentinel-net
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  sentinel-net:
+    driver: bridge

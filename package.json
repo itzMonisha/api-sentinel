@@ -1,0 +1,15 @@
+{
+  "name": "api-sentinel",
+  "version": "0.0.1",
+  "private": true,
+  "description": "API Sentinel — API Security, Reliability and Observability Platform",
+  "scripts": {
+    "frontend:install": "npm --prefix frontend install",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "backend:build": "cd backend && .\\mvnw.cmd clean package -DskipTests",
+    "backend:test": "cd backend && .\\mvnw.cmd test \"-Dspring.profiles.active=test\"",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  }
+}
