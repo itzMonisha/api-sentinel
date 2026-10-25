@@ -27,10 +27,14 @@ frontend/dist/
 
 # Environment and secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.pem
 *.key
+*.pfx
+*.p12
+*.jks
+*.crt
 
 # IDE and Editor files
 .idea/

@@ -145,7 +145,7 @@ This checklist tracks the end-to-end development of API Sentinel across incremen
 
 ---
 
-## Phase 08 & Phase 09: API Reliability Monitoring, Incidents & Alerting (COMPLETED)
+## Phase 08: API Reliability Monitoring, Incidents & Alerting (COMPLETED)
 - [x] Implement Flyway migration `V6__init_reliability_monitoring.sql` (`health_checks`, `health_check_records`, `incidents`, `alert_notifications`).
 - [x] Implement `HealthCheck`, `HealthCheckRecord`, `Incident`, and `AlertNotification` entities and JPA repositories.
 - [x] Implement scheduled health probe runner (`HealthCheckScheduler`) with bounded concurrency worker pool (`Executors.newFixedThreadPool`) and graceful shutdown.
@@ -176,6 +176,43 @@ This checklist tracks the end-to-end development of API Sentinel across incremen
   - `ReliabilityMonitoringUnitTest`: 6 tests verifying metric math, zero denominators, insufficient data detection, threshold crossing, deduplication, and recovery.
   - `ReliabilityMonitoringIntegrationTest`: 4 integration tests verifying dynamic failing local test endpoints creating incidents, deduplication, auto-recovery on healthy probe, manual acknowledge/resolve, bounded scheduler execution, and cross-project authorization.
 - [x] Frontend UI: Full-featured `IncidentsPage.tsx` with KPI overview cards, status/severity filters, incident state actions, health check scheduler configuration modal, probe trigger with immediate feedback, execution history drawer, and in-app alert center feed.
+
+---
+
+## Phase 09: Production Deployment & Cloud Readiness (COMPLETED)
+- [x] **Production Backend Configuration & Hardening**:
+  - `application-prod.yml` with Hikari connection pool tuning, Flyway clean protection, and mandatory `${JWT_SECRET}`.
+  - `DatabaseUrlEnvironmentPostProcessor.java`: 12-factor cloud PostgreSQL URI parsing (`postgres://` to `jdbc:postgresql://` with SSL enforcement).
+  - Graceful shutdown timeout (30s) and response stream compression.
+  - `backend/Dockerfile`: Multi-stage Alpine container, non-root user `sentinel:10001`, `dumb-init` signal handling, and built-in HEALTHCHECK.
+- [x] **Optimized Frontend Production Build & Hosting**:
+  - Vite production bundle optimization (346 kB bundle size, sub-3s build).
+  - Dynamic API base URL resolution via `import.meta.env.VITE_API_URL` or relative fallback.
+  - `frontend/nginx.conf`: SPA routing (`try_files`), security headers (HSTS, CSP, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy), immutable asset caching, and `/healthz` probe.
+  - `frontend/Dockerfile`: Multi-stage Alpine build with `npm ci && npm run build` and `nginx:alpine-slim` runtime.
+- [x] **Controlled Flyway Migrations on Startup**:
+  - `FlywayStartupValidator.java`: ApplicationReadyEvent listener validating migration checksums, pending scripts, and schema baseline.
+  - Expand/Contract zero-downtime migration documentation in `docs/DEPLOYMENT.md`.
+- [x] **CORS & Ingress Security**:
+  - `CorsConfig.java`: Strict origin matching supporting patterns and explicit production origins.
+  - Reverse proxy templates for Caddy (`infra/caddy/Caddyfile`) and Nginx (`infra/nginx/nginx-ssl.conf.template`) with TLS 1.2/1.3 and HSTS.
+- [x] **Restricted Actuator Endpoints**:
+  - `/actuator/health` and `/actuator/info` exposed for orchestration probes.
+  - Administrative endpoints (`/actuator/metrics`, etc.) strictly locked behind `ROLE_ADMIN` authentication.
+- [x] **Secret Leakage Prevention & Production Log Masking**:
+  - `.gitignore` audit ensuring `.env*`, keys, certificates, and secrets are uncommitted.
+  - `MaskingMessageConverter.java`: Logback converter automatically masking JWTs, passwords, Bearer tokens, query credentials, database connection URIs, AWS keys, and private keys.
+  - Verified no secrets in frontend bundle or repository.
+- [x] **Zero-Trust Outbound Scanning Security Policy**:
+  - `ProductionOutboundSecurityPolicyTest`: 23 tests verifying loopback, RFC 1918 private subnets, link-local, and AWS/GCP/Azure cloud metadata are strictly blocked in production (`allow-local-targets=false`).
+- [x] **CI/CD Automation**:
+  - `.github/workflows/ci.yml`: GitHub Actions workflow validating backend tests with PostgreSQL service container, frontend tests, and Docker builds on pull requests.
+- [x] **Operational Runbooks & Comprehensive Documentation**:
+  - `docs/DEPLOYMENT.md`: Hosting guides for Render, Railway, Fly.io, AWS ECS+RDS, and VPS Docker Compose.
+  - Backup & Disaster Recovery runbook (Continuous WAL archiving, automated snapshots, PITR, `pg_dump` automation, RTO/RPO SLA targets).
+  - Rolling update and emergency rollback procedures.
+- [x] **End-to-End Deployment Verification**:
+  - `DeploymentVerificationTest`: 10/10 automated tests passing across startup, migrations, health probes, actuator restrictions, HTTPS auth, invalid auth rejection, CRUD, test execution, security scans, incident lifecycle, and secret redaction.
 
 ---
 

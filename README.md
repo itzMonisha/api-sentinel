@@ -67,6 +67,7 @@ Detailed engineering specifications are available in the [`docs/`](./docs) direc
 - 🏛️ [**Technical Architecture & Interview Guide**](./docs/ARCHITECTURE.md): Design decisions, SSRF defense engine, algorithms, data structures, and SDE interview questions.
 - 🗄️ [**Database Design & Schema Specification**](./docs/DATABASE_DESIGN.md): Relational schemas, indexing strategies, audit fields, and Flyway migration roadmap.
 - 🔌 [**REST API Contract Specification**](./docs/API_CONTRACT.md): Standard request/response envelopes, RFC 7807 problem details, and endpoint catalogs.
+- 🚀 [**Production Deployment & Operations Guide**](./docs/DEPLOYMENT.md): 12-factor configuration, Docker container specs, cloud hosting guides (Render, Railway, Fly.io, AWS ECS+RDS), zero-trust egress review, Flyway startup validation, backup runbooks, and verified test results.
 - ✅ [**Implementation Master Checklist**](./docs/CHECKLIST.md): Phased roadmap from Phase 00 through Phase 12.
 
 ---
@@ -143,3 +144,13 @@ cd backend
 cd frontend
 npm run build
 ```
+
+---
+
+### 5. Production Docker Compose Deployment
+```bash
+# Start all production containers (PostgreSQL 16, Spring Boot Backend, Nginx SPA Frontend)
+docker compose -f docker-compose.prod.yml up -d --build
+```
+For complete cloud hosting instructions (Render, Railway, Fly.io, AWS ECS+RDS), Let's Encrypt TLS setup via Caddy, backup/restore runbooks, and zero-trust egress review, consult [**`docs/DEPLOYMENT.md`**](./docs/DEPLOYMENT.md).
+

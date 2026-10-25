@@ -12,6 +12,7 @@ import com.sentinel.modules.project.entity.ProjectRole;
 import com.sentinel.modules.project.repository.ApiEndpointRepository;
 import com.sentinel.modules.project.repository.ProjectMemberRepository;
 import com.sentinel.modules.project.repository.ProjectRepository;
+import com.sentinel.modules.auth.repository.RefreshTokenRepository;
 import com.sentinel.modules.testing.repository.TestCaseRepository;
 import com.sentinel.modules.testing.repository.TestResultRepository;
 import com.sentinel.modules.testing.repository.TestRunRepository;
@@ -80,6 +81,9 @@ class SecurityAuthTokenAndEscalationTest {
     @Autowired(required = false)
     private TestSuiteRepository testSuiteRepository;
 
+    @Autowired(required = false)
+    private RefreshTokenRepository refreshTokenRepository;
+
     @Autowired
     private PasswordEncoder passwordEncoder;
 
@@ -111,6 +115,9 @@ class SecurityAuthTokenAndEscalationTest {
         apiEndpointRepository.deleteAll();
         projectMemberRepository.deleteAll();
         projectRepository.deleteAll();
+        if (refreshTokenRepository != null) {
+            refreshTokenRepository.deleteAll();
+        }
         userRepository.deleteAll();
 
         userAlice = userRepository.save(new User(

@@ -36,7 +36,11 @@ import {
 } from '../types';
 
 export class ApiClient {
-  private static baseUrl = '';
+  private static baseUrl = (
+    (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL))
+    ? String(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL).replace(/\/+$/, '')
+    : ''
+  );
   private static accessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('sentinel_access_token') : null;
   private static refreshTokenVal: string | null = typeof window !== 'undefined' ? localStorage.getItem('sentinel_refresh_token') : null;
   private static currentUser: User | null = null;

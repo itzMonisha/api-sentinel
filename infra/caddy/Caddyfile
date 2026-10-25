@@ -1,0 +1,42 @@
+# ==============================================================================
+# API Sentinel — Production Caddy Configuration with Automatic Let's Encrypt TLS
+# Replace {$DOMAIN:api-sentinel.dev} with your public domain
+# ==============================================================================
+
+{$DOMAIN:api-sentinel.dev} {
+    # Automatic TLS with Let's Encrypt / ZeroSSL
+    tls {$ACME_EMAIL:admin@apisentinel.dev}
+
+    # Security Headers
+    header {
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    # Compress response streams
+    encode zstd gzip
+
+    # Reverse proxy backend API and health endpoints
+    handle /api/* {
+        reverse_proxy backend:8080 {
+            header_up X-Forwarded-Proto https
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    handle /actuator/health* {
+        reverse_proxy backend:8080 {
+            header_up X-Forwarded-Proto https
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # All other routes served by frontend SPA container
+    handle {
+        reverse_proxy frontend:80
+    }
+}
